@@ -19,6 +19,13 @@
 - **Output:** Writes the flagged transaction to an `alerts` Kafka topic or a PostgreSQL DB.
 - **API Layer:** FastAPI app to simulate transactions, query user risk scores, and serve a basic dashboard.
 
+## 2.1 Crucial Design Decisions (DO NOT IGNORE)
+1. **High-Cardinality ID Handling:** We will **NOT** label-encode `nameOrig` and `nameDest` for the Autoencoder. Feeding 6M unique IDs as integers into a dense neural network introduces arbitrary ordinality and noise. 
+   - *Autoencoder Input:* Strictly tabular/behavioral features (e.g., `log(amount)`, `oldbalanceErr`, `newbalanceErr`, `hour_of_day`, `tx_type_encoded`).
+   - *GNN Input:* `nameOrig` and `nameDest` are mapped to contiguous integer node indices (0 to N) strictly for building the PyTorch Geometric edge index.
+2. **Feature Engineering:** Financial amounts are highly skewed. We will apply `np.log1p()` to transaction amounts and balance differences before feeding them to the Autoencoder to ensure stable gradient descent.
+3. **Streaming Broker:** We use **Redpanda** instead of Confluent Kafka + Zookeeper. It is a drop-in Kafka replacement that is lighter, faster, and does not require Zookeeper. Python code should connect to `localhost:19092`.
+
 ## 3. Data Sources
 Since real-world fintech graph data is highly confidential, we will use and augment public datasets:
 1. **PaySim (Kaggle):** Mobile money simulation. (Use for tabular Autoencoder training).
@@ -28,6 +35,7 @@ Since real-world fintech graph data is highly confidential, we will use and augm
 ```text
 finomaly/
 ├── AGENTS.md               # This file
+├── .gitignore               # ignore files not meant for github
 ├── docker-compose.yml      # Kafka, Zookeeper, Redis setup
 ├── requirements.txt        # Python dependencies
 ├── data/
@@ -39,4 +47,5 @@ finomaly/
 │   ├── streaming/          # Kafka producers and consumers
 │   └── api/                # FastAPI application
 ├── scripts/                # Bash scripts for starting services
+├── blueprint/                # phase-by-phase prompts
 └── notebooks/              # Jupyter notebooks for EDA and training
